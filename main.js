@@ -1,3 +1,42 @@
+class Cell {
+	constructor() {
+		//this.xPos = 0;
+		//this.yPos = 0;
+		this.state = false;
+		this.color = null;
+		this.dragState = false;
+	}
+
+	born() {
+		this.state = true;
+	}
+
+	kill() {
+		this.state = false;
+	}
+
+	changeState() {
+		this.state = !this.state;
+	}
+
+	isAlive() {
+		return this.state;
+	}
+
+	drag() {
+		this.dragState = true;
+	}
+
+	noDrag() {
+		this.dragState = false;
+	}
+
+	isDrag() {
+		return this.dragState;
+	}
+}
+
+
 function make2DArray(cols, rows) {
 	let arr = new Array(cols);
 	for(let i = 0; i < cols; i++) {
@@ -7,7 +46,7 @@ function make2DArray(cols, rows) {
 	for(let i = 0; i < cols; i++) {
 		for(let j = 0; j < rows; j++) {
 			// to use random values use:
-			arr[i][j] = floor(random(2));
+			arr[i][j] = new Cell();
 			// arr[i][j] = 0;
 		}
 	}
@@ -21,11 +60,15 @@ var fps = 10;
 var mouseIsActive = false;
 var cols;
 var rows;
-var resolution = 40;
+var resolution = 10;
 var grid;
-var pause = false;
+var pause = true;
 
 var slider;
+var buttonPlay;
+var buttonClear;
+
+var time;
 
 function setup() {
 	createCanvas(800, 600);
@@ -33,54 +76,70 @@ function setup() {
 	cols = width / resolution;
 	rows = height / resolution;
 	grid = make2DArray(cols, rows);
+	frameRate(fpsMax);
+	time = 0;
 
-	let button = createButton("play");
-	button.mousePressed(handlePlay);
+	buttonPlay = createButton("Play");
+	buttonPlay.mousePressed(handlePlay);
+	buttonClear = createButton("Clear");
+	buttonClear.mousePressed(clearGrid);
 	slider = createSlider(fpsMin, fpsMax, fps);
-
-	frameRate(fpsMin);
 }
 
 function handlePlay() {
 	pause = !pause;
+	let text;
+	if(pause) text = "Play";
+	else text = "Pause";
+	buttonPlay.html(text);
 }
 
 function draw() {
-	background(0);
-	frameRate(slider.value());
-	for(let i = 0; i < cols; i++) {
-		for(let j = 0; j < rows; j++) {
-			let x = i * resolution;
-			let y = j * resolution;
-			if(grid[i][j] == 1) {
-				fill(255);
-				stroke(0);
-				rect(x, y, resolution-1, resolution-1)
+	fps = slider.value();
+	if(fps < 60) {
+		frameRate(60);
+	} else {
+		frameRate(fps);
+	}
+	time += deltaTime/1000;
+	if(time >= 1/fps) {
+		time = 0;
+		background(0);
+		for(let i = 0; i < cols; i++) {
+			for(let j = 0; j < rows; j++) {
+				let x = i * resolution;
+				let y = j * resolution;
+				if(grid[i][j].isAlive()) {
+					fill(255);
+					stroke(0);
+					rect(x, y, resolution-1, resolution-1)
+				}
 			}
 		}
-	}
 
-	if(pause == true) return;
-	let next = make2DArray(cols, rows);
-	// claculate the next grid
-	for(let i = 0; i < cols; i++) {
-		for(let j = 0; j < rows; j++) {
-			let state = grid[i][j];
-			let neighbors = countNeighbors(grid, i, j);
+		if(pause == true) return;
+		let next = make2DArray(cols, rows);
+		// claculate the next grid
+		for(let i = 0; i < cols; i++) {
+			for(let j = 0; j < rows; j++) {
+				let state = grid[i][j].isAlive();
+				let neighbors = countNeighbors(grid, i, j);
 
 
-			// game rules
-			if(state == 0 && neighbors == 3) {
-				next[i][j] = 1;
-			} else if(state == 1 && (neighbors < 2 || neighbors > 3)) {
-				next[i][j] = 0;
-			} else {
-				next[i][j] = grid[i][j];
+				// game rules
+				if(state == 0 && neighbors == 3) {
+					next[i][j].born();
+				} else if(state == 1 && (neighbors < 2 || neighbors > 3)) {
+					next[i][j].kill();
+				} else {
+					next[i][j] = grid[i][j];
 			}
 		}
 	}
 	
 	grid = next;
+		
+	}
 }
 
 function countNeighbors(grid, x, y) {
@@ -89,35 +148,56 @@ function countNeighbors(grid, x, y) {
 		for(let j = -1; j < 2; j++) {
 			let col = (x + i + cols) % cols;
 			let row = (y + j + rows) % rows;
-			sum += grid[col][row];
+			sum += grid[col][row].state;
 		}
 	}
-	sum -= grid[x][y];
+	sum -= grid[x][y].state;
 	return sum;
 }
 
-var pressed = new Array();
 function mousePressed() {
-	mouseIsActive = true;
+	if(mouseX > 0 && mouseY > 0 && mouseX <= width && mouseY <= height) {
+		mouseIsActive = true;
+		let i = floor(mouseX / resolution);
+		let j = floor(mouseY / resolution);
+		let cell = grid[i][j];
+		if(!cell.isDrag()) {
+			cell.drag();
+			grid[i][j].changeState();
+		}
+
+	}
 }
 
 function mouseReleased() {
 	mouseIsActive = false;
-	pressed = [];
+
+	for(let i = 0; i < cols; i++) {
+		for(let j = 0; j < rows; j++) {
+			let cell = grid[i][j];
+			if(cell.isDrag()) {
+				cell.noDrag();
+			}
+		}
+	}
 }
 
 function mouseDragged() {
 	if(mouseIsActive && mouseX > 0 && mouseY > 0 && mouseX <= width && mouseY <= height) {
-		i = floor(mouseX / resolution);
-		j = floor(mouseY / resolution);
-		let len = pressed.length;
-		for(let i = 0; i < len; i++) {
-			if(pressed[i][0] == i && pressed[i][1] == j){ console.log("ababoe");return;}
+		let i = floor(mouseX / resolution);
+		let j = floor(mouseY / resolution);
+		let cell = grid[i][j];
+		if(!cell.isDrag()) {
+			cell.drag();
+			grid[i][j].changeState();
 		}
-		grid[i][j] = !grid[i][j];
-		arr = new Array(2);
-		arr[0] = i;
-		arr[1] = j;
-		pressed.push(arr);
+	}
+}
+
+function clearGrid() {
+	for(let i = 0; i < cols; i++) {
+		for(let j = 0; j < rows; j++) {
+			grid[i][j].kill();
+		}
 	}
 }
